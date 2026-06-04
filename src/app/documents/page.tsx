@@ -214,8 +214,25 @@ export default function ProspectivePage() {
         </header>
         <main className="flex-1 overflow-y-auto">
           {selectedDoc.html_content && (
-            <div className="p-5 prose prose-sm max-w-none border-b border-slate-100"
-              dangerouslySetInnerHTML={{ __html: selectedDoc.html_content }} />
+            <div className="p-5 border-b border-slate-100">
+              <div
+                className="prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: selectedDoc.html_content }}
+                onClick={(e) => {
+                  // 카드 클릭 시 rbs-homes 링크로 이동
+                  const target = (e.target as HTMLElement).closest("[data-rbs-url]") as HTMLElement | null;
+                  if (target) {
+                    const url = target.getAttribute("data-rbs-url");
+                    if (url) window.open(url, "_blank");
+                  }
+                }}
+              />
+              {selectedDoc.type === "LISTING_REPORT" && (
+                <p className="text-[10px] text-slate-400 mt-3 text-center">
+                  Tap a listing card to view details on rbs-homes.com
+                </p>
+              )}
+            </div>
           )}
           {isLoi && !isSigned && (
             <div className="p-5 space-y-4">
