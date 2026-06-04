@@ -90,24 +90,26 @@ export default function LandlordPortal() {
       if (!user) return;
 
       // pms_auth_map → contact_id 조회
-      const { data: authMap } = await supabase
+      const { data: authMapRaw } = await supabase
         .from("pms_auth_map")
         .select("contact_id")
         .eq("auth_uid", user.id)
         .single();
 
+      const authMap = authMapRaw as { contact_id: string } | null;
       if (!authMap?.contact_id) { setLoading(false); return; }
 
       // 임대인 이름
-      const { data: contact } = await supabase
+      const { data: contactRaw } = await supabase
         .from("contacts")
         .select("name")
         .eq("id", authMap.contact_id)
         .single();
+      const contact = contactRaw as { name: string } | null;
       if (contact) setLandlordName(contact.name);
 
       // 본인 소유 매물의 deals 전체 조회
-      const { data: dealData } = await supabase
+      const { data: dealDataRaw } = await supabase
         .from("deals")
         .select(`
           id, listing_id, contract_type, contract_date,
@@ -120,25 +122,26 @@ export default function LandlordPortal() {
         .eq("owner_contact_id", authMap.contact_id)
         .order("contract_date", { ascending: false });
 
+      const dealData = dealDataRaw as Deal[] | null;
       if (dealData && dealData.length > 0) {
-        setDeals(dealData as Deal[]);
+        setDeals(dealData);
         const dealIds = dealData.map((d) => d.id);
 
         // 납부 스케줄
-        const { data: paymentData } = await supabase
+        const { data: paymentDataRaw } = await supabase
           .from("payment_schedules")
           .select("*")
           .in("deal_id", dealIds)
           .order("due_date", { ascending: false });
-        if (paymentData) setAllPayments(paymentData);
+        if (paymentDataRaw) setAllPayments(paymentDataRaw as PaymentSchedule[]);
 
         // 케어 서비스
-        const { data: careData } = await supabase
+        const { data: careDataRaw } = await supabase
           .from("care_service_requests")
           .select("*")
           .in("deal_id", dealIds)
           .order("created_at", { ascending: false });
-        if (careData) setAllCare(careData);
+        if (careDataRaw) setAllCare(careDataRaw as CareRequest[]);
       }
       setLoading(false);
     }

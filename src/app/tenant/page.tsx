@@ -34,6 +34,8 @@ type PaymentSchedule = {
   verified_at: string | null;
 };
 
+type Worker = { name: string; mobile: string; tools: string; notes: string };
+
 type CareRequest = {
   id: string;
   deal_id: string;
@@ -43,7 +45,7 @@ type CareRequest = {
   description: string | null;
   scheduled_at: string | null;
   assigned_to: string | null;
-  workers: unknown;
+  workers: Worker[] | null;
   gatepass_notes: string | null;
 };
 
@@ -81,7 +83,7 @@ export default function TenantDashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [receiptNotes, setReceiptNotes] = useState("");
   const [careForm, setCareForm] = useState({ service_type: "AIRCON", preferred_date: "", description: "" });
   const [careSubmitting, setCareSubmitting] = useState(false);
@@ -92,22 +94,24 @@ export default function TenantDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: authMap } = await supabase
+      const { data: authMapRaw } = await supabase
         .from("pms_auth_map")
         .select("contact_id")
         .eq("auth_uid", user.id)
         .single();
 
+      const authMap = authMapRaw as { contact_id: string } | null;
       if (!authMap?.contact_id) { setLoading(false); return; }
 
-      const { data: contact } = await supabase
+      const { data: contactRaw } = await supabase
         .from("contacts")
         .select("name")
         .eq("id", authMap.contact_id)
         .single();
+      const contact = contactRaw as { name: string } | null;
       if (contact) setUserName(contact.name.split(" ")[0]);
 
-      const { data: dealData } = await supabase
+      const { data: dealDataRaw } = await supabase
         .from("deals")
         .select(`
           id, listing_id, contract_date, move_in_date, contract_end_date,
@@ -121,40 +125,41 @@ export default function TenantDashboard() {
         .limit(1)
         .single();
 
+      const dealData = dealDataRaw as Deal | null;
       if (dealData) {
-        setDeal(dealData as Deal);
+        setDeal(dealData);
 
-        const { data: paymentData } = await supabase
+        const { data: paymentDataRaw } = await supabase
           .from("payment_schedules")
           .select("*")
           .eq("deal_id", dealData.id)
           .order("due_date", { ascending: false })
           .limit(6);
-        if (paymentData) setPayments(paymentData);
+        if (paymentDataRaw) setPayments(paymentDataRaw as PaymentSchedule[]);
 
-        const { data: careData } = await supabase
+        const { data: careDataRaw } = await supabase
           .from("care_service_requests")
           .select("*")
           .eq("deal_id", dealData.id)
           .order("created_at", { ascending: false })
           .limit(5);
-        if (careData) setCareRequests(careData);
+        if (careDataRaw) setCareRequests(careDataRaw as CareRequest[]);
 
-        const { data: postData } = await supabase
+        const { data: postDataRaw } = await supabase
           .from("community_posts")
           .select("*")
           .eq("listing_id", dealData.listing_id)
           .order("created_at", { ascending: false })
           .limit(10);
-        if (postData) setPosts(postData);
+        if (postDataRaw) setPosts(postDataRaw as CommunityPost[]);
       }
 
-      const { data: notifData } = await supabase
+      const { data: notifDataRaw } = await supabase
         .from("pms_notifications")
         .select("id")
         .eq("auth_uid", user.id)
         .eq("is_read", false);
-      if (notifData) setUnreadCount(notifData.length);
+      if (notifDataRaw) setUnreadCount((notifDataRaw as {id:string}[]).length);
 
       setLoading(false);
     }
@@ -177,7 +182,8 @@ export default function TenantDashboard() {
       const { error: storageError } = await supabase.storage.from("payment-receipts").upload(path, file, { upsert: true });
       if (storageError) throw storageError;
       const { data: urlData } = supabase.storage.from("payment-receipts").getPublicUrl(path);
-      const { error: updateError } = await supabase.from("payment_schedules").update({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateError } = await (supabase as any).from("payment_schedules").update({
         status: "AWAITING_APPROVAL", receipt_image_url: urlData.publicUrl, receipt_notes: receiptNotes,
       }).eq("id", paymentId);
       if (updateError) throw updateError;
@@ -193,12 +199,13 @@ export default function TenantDashboard() {
     if (!deal) return;
     setCareSubmitting(true);
     try {
-      const { data, error } = await supabase.from("care_service_requests").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: careInserted, error } = await (supabase as any).from("care_service_requests").insert({
         deal_id: deal.id, service_type: careForm.service_type,
         preferred_date: careForm.preferred_date, description: careForm.description || null, status: "PENDING",
       }).select().single();
       if (error) throw error;
-      setCareRequests((prev) => [data, ...prev]);
+      setCareRequests((prev) => [careInserted as CareRequest, ...prev]);
       setCareSuccess(true);
       setCareForm({ service_type: "AIRCON", preferred_date: "", description: "" });
     } catch (e) { console.error(e); }
@@ -370,11 +377,11 @@ export default function TenantDashboard() {
                       </div>
                     )}
                     {/* 작업자 정보 (SCHEDULED/COMPLETED) */}
-                    {(req.status === "SCHEDULED" || req.status === "COMPLETED") && req.workers && (req.workers as unknown[]).length > 0 && (
+                    {(req.status === "SCHEDULED" || req.status === "COMPLETED") && req.workers && req.workers.length > 0 && (
                       <div className="border-t border-slate-200 px-3 py-2 bg-white">
                         <p className="text-[10px] font-bold text-slate-500 mb-2">GATEPASS 작업자 정보</p>
                         <div className="space-y-2">
-                          {(req.workers as {name:string;mobile:string;tools:string;notes:string}[]).map((w, i) => (
+                          {req.workers.map((w, i) => (
                             <div key={i} className="bg-slate-50 rounded-lg p-2 text-[10px]">
                               <div className="flex justify-between">
                                 <span className="font-bold text-slate-800">{i+1}. {w.name}</span>
@@ -472,7 +479,7 @@ export default function TenantDashboard() {
 
 function PaymentCard({ payment, onUpload, uploading, uploadError, fileInputRef, notes, onNotesChange }: {
   payment: PaymentSchedule; onUpload: (id: string, file: File) => void; uploading: boolean;
-  uploadError: string; fileInputRef: React.RefObject<HTMLInputElement>; notes: string; onNotesChange: (v: string) => void;
+  uploadError: string; fileInputRef: React.RefObject<HTMLInputElement | null>; notes: string; onNotesChange: (v: string) => void;
 }) {
   const badge = PAYMENT_STATUS_BADGE[payment.status];
   const isPending = payment.status === "PENDING";

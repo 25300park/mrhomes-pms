@@ -7,20 +7,24 @@ export default async function RootPage() {
 
   if (!user) redirect("/login");
 
-  // service_role 대신 auth_uid 직접 비교로 RLS 우회
-  const { data, error } = await supabase
+  // pms_auth_map에서 역할 확인
+  const { data } = await supabase
     .from("pms_auth_map")
     .select("role")
     .eq("auth_uid", user!.id)
     .maybeSingle();
 
-  console.log("pms_auth_map result:", data, error);
+  const authMap = data as { role: string } | null;
 
-  if (!data) redirect("/tenant"); // 임시: 데이터 없어도 tenant로 이동
+  if (!authMap) redirect("/tenant");
 
-  switch (data.role) {
+  switch (authMap.role) {
     case "tenant":   redirect("/tenant");
     case "landlord": redirect("/landlord");
-    default:         redirect("/tenant");
+    case "admin":
+    case "agent":
+      redirect(process.env.NEXT_PUBLIC_CRM_URL ?? "/login");
+    default:
+      redirect("/tenant");
   }
 }
