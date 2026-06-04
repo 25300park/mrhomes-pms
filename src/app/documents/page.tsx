@@ -42,6 +42,7 @@ export default function ProspectivePage() {
   const [userName, setUserName] = useState("고객");
   const [selectedDoc, setSelectedDoc] = useState<PmsDocument | null>(null);
   const [view, setView] = useState<"list" | "detail" | "sign">("list");
+  const [docViewMode, setDocViewMode] = useState<"summary" | "preview">("summary");
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -83,6 +84,7 @@ export default function ProspectivePage() {
   async function openDoc(doc: PmsDocument) {
     setSelectedDoc(doc);
     setView("detail");
+    setDocViewMode("summary");
     setComment(doc.comment || "");
     setHasSigned(false);
     if (doc.status === "SENT") {
@@ -214,23 +216,68 @@ export default function ProspectivePage() {
         </header>
         <main className="flex-1 overflow-y-auto">
           {selectedDoc.html_content && (
-            <div className="p-5 border-b border-slate-100">
-              <div
-                className="prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: selectedDoc.html_content }}
-                onClick={(e) => {
-                  const card = (e.target as HTMLElement).closest("[data-rbs-url]") as HTMLElement | null;
-                  if (card) {
-                    const url = card.getAttribute("data-rbs-url");
-                    if (url) window.open(url, "_blank");
-                  }
-                }}
-                style={{ cursor: "default" }}
-              />
-              {selectedDoc.type === "LISTING_REPORT" && (
-                <p className="text-[10px] text-slate-400 mt-3 text-center">
-                  Tap a listing card to view details on rbs-homes.com
-                </p>
+            <div className="border-b border-slate-100">
+              {/* 뷰 모드 탭 */}
+              <div className="flex border-b border-slate-200 bg-slate-50">
+                <button
+                  onClick={() => setDocViewMode("summary")}
+                  className={`flex-1 py-2.5 text-xs font-medium transition-colors ${docViewMode === "summary" ? "border-b-2 border-[#2a4d69] text-[#2a4d69] bg-white" : "text-slate-400"}`}
+                >
+                  📋 Summary
+                </button>
+                <button
+                  onClick={() => setDocViewMode("preview")}
+                  className={`flex-1 py-2.5 text-xs font-medium transition-colors ${docViewMode === "preview" ? "border-b-2 border-[#2a4d69] text-[#2a4d69] bg-white" : "text-slate-400"}`}
+                >
+                  🔍 Full Preview
+                </button>
+              </div>
+
+              {/* Summary 뷰 */}
+              {docViewMode === "summary" && (
+                <div className="p-4">
+                  {selectedDoc.type === "LOI" ? (
+                    <LoiSummary html={selectedDoc.html_content} />
+                  ) : (
+                    <div
+                      onClick={(e) => {
+                        const card = (e.target as HTMLElement).closest("[data-rbs-url]") as HTMLElement | null;
+                        if (card) {
+                          const url = card.getAttribute("data-rbs-url");
+                          if (url) window.open(url, "_blank");
+                        }
+                      }}
+                      dangerouslySetInnerHTML={{ __html: selectedDoc.html_content }}
+                    />
+                  )}
+                  {selectedDoc.type === "LISTING_REPORT" && (
+                    <p className="text-[10px] text-slate-400 mt-3 text-center">
+                      Tap a listing card to view details on rbs-homes.com
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Full Preview 뷰 — A4 비율 스케일 */}
+              {docViewMode === "preview" && (
+                <div className="overflow-auto bg-slate-200 p-3" style={{ minHeight: "500px" }}>
+                  <div
+                    style={{
+                      width: "794px",
+                      minHeight: "1123px",
+                      background: "white",
+                      transform: "scale(0.42)",
+                      transformOrigin: "top left",
+                      boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+                      padding: "40px 50px",
+                      marginBottom: "-650px",
+                    }}
+                    dangerouslySetInnerHTML={{ __html: selectedDoc.html_content }}
+                  />
+                  <p className="text-[10px] text-slate-500 text-center mt-3">
+                    Pinch to zoom · A4 preview
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -347,6 +394,68 @@ export default function ProspectivePage() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+// ── LOI Summary 컴포넌트 ─────────────────────────────────────
+function LoiSummary({ html }: { html: string }) {
+  if (typeof window === "undefined") return null;
+
+  const parser = new DOMParser().parseFromString(html, "text/html");
+
+  const getCell = (label: string) => {
+    const cells = Array.from(parser.querySelectorAll("td"));
+    const labelCell = cells.find(td => td.textContent?.trim().toLowerCase() === label.toLowerCase());
+    return labelCell?.nextElementSibling?.textContent?.trim() || null;
+  };
+
+  const getListItem = (keyword: string) => {
+    const items = Array.from(parser.querySelectorAll("li, p, strong"));
+    const item = items.find(el => el.textContent?.toLowerCase().includes(keyword.toLowerCase()));
+    return item?.closest("li")?.textContent?.trim() || item?.textContent?.trim() || null;
+  };
+
+  const clean = (s: string | null) => {
+    if (!s) return "-";
+    return s.replace(/^\d+\.\s*/, "").split(":").slice(1).join(":").trim() || s.trim();
+  };
+
+  const propertyName = getCell("Property Name");
+  const unitNo       = getCell("Unit No.");
+  const address      = getCell("Address");
+  const floorArea    = getCell("Floor Area");
+  const furnished    = getCell("Furnished");
+
+  const rows: [string, string][] = [
+    ["Property",        propertyName || "-"],
+    ["Unit No.",        unitNo || "-"],
+    ["Address",         address || "-"],
+    ["Floor Area",      floorArea || "-"],
+    ["Furnished",       furnished || "-"],
+    ["Monthly Rent",    clean(getListItem("Monthly Rental"))],
+    ["Security Deposit",clean(getListItem("Security Deposit"))],
+    ["Advance Payment", clean(getListItem("Advance Payment"))],
+    ["Lease Duration",  clean(getListItem("Lease Duration"))],
+    ["Move-in Date",    clean(getListItem("Move-in Date") || getListItem("Intended Move-in"))],
+    ["Pet Policy",      clean(getListItem("Pet Policy"))],
+  ].filter(([, v]) => v && v !== "-") as [string, string][];
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-[#1a2a3a] text-white p-4 rounded-xl">
+        <p className="text-xs text-slate-300 mb-1">Letter of Intent to Lease</p>
+        <p className="font-bold text-base">{propertyName || "Property"}</p>
+        {unitNo && <p className="text-xs text-slate-300 mt-0.5">Unit {unitNo}</p>}
+      </div>
+      <div className="space-y-1.5">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex justify-between items-start bg-slate-50 rounded-lg px-3 py-2.5">
+            <span className="text-xs text-slate-500 w-36 flex-shrink-0">{label}</span>
+            <span className="text-xs font-semibold text-slate-800 text-right ml-2">{value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
