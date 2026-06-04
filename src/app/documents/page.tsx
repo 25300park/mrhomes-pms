@@ -219,13 +219,13 @@ export default function ProspectivePage() {
                 className="prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: selectedDoc.html_content }}
                 onClick={(e) => {
-                  // 카드 클릭 시 rbs-homes 링크로 이동
-                  const target = (e.target as HTMLElement).closest("[data-rbs-url]") as HTMLElement | null;
-                  if (target) {
-                    const url = target.getAttribute("data-rbs-url");
+                  const card = (e.target as HTMLElement).closest("[data-rbs-url]") as HTMLElement | null;
+                  if (card) {
+                    const url = card.getAttribute("data-rbs-url");
                     if (url) window.open(url, "_blank");
                   }
                 }}
+                style={{ cursor: "default" }}
               />
               {selectedDoc.type === "LISTING_REPORT" && (
                 <p className="text-[10px] text-slate-400 mt-3 text-center">
