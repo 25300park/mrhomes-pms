@@ -258,9 +258,19 @@ export default function ProspectivePage() {
                 </div>
               )}
 
-              {/* Full Preview 뷰 — A4 비율 스케일 */}
+              {/* Full Preview 뷰 — A4 비율, 뷰어 안에서만 줌 */}
               {docViewMode === "preview" && (
-                <div className="overflow-auto bg-slate-200 p-3" style={{ minHeight: "500px" }}>
+                <div
+                  style={{
+                    overflow: "auto",
+                    background: "#e2e8f0",
+                    padding: "12px",
+                    minHeight: "480px",
+                    maxHeight: "70vh",
+                    touchAction: "pan-x pan-y",
+                    WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"],
+                  }}
+                >
                   <div
                     style={{
                       width: "794px",
@@ -271,11 +281,12 @@ export default function ProspectivePage() {
                       boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
                       padding: "40px 50px",
                       marginBottom: "-650px",
+                      pointerEvents: "none",
                     }}
                     dangerouslySetInnerHTML={{ __html: selectedDoc.html_content }}
                   />
-                  <p className="text-[10px] text-slate-500 text-center mt-3">
-                    Pinch to zoom · A4 preview
+                  <p className="text-[10px] text-slate-500 text-center mt-2">
+                    Scroll to view · A4 preview
                   </p>
                 </div>
               )}
@@ -427,6 +438,47 @@ function LoiSummary({ html }: { html: string }) {
   const floorArea    = getCell("Floor Area");
   const furnished    = getCell("Furnished");
 
+  // Special Conditions 파싱
+  const getSpecialConditions = () => {
+    if (!parser) return null;
+    // "Special Conditions" 또는 "Special Terms" 헤딩 찾기
+    const headings = Array.from(parser.querySelectorAll("h1,h2,h3,h4,h5,p,td,th,strong,b"));
+    const scHeading = headings.find(el =>
+      el.textContent?.toLowerCase().includes("special condition") ||
+      el.textContent?.toLowerCase().includes("special term") ||
+      el.textContent?.toLowerCase().includes("other condition")
+    );
+    if (!scHeading) return null;
+    // 다음 형제 요소들에서 내용 추출
+    const items: string[] = [];
+    let next = scHeading.parentElement?.nextElementSibling || scHeading.nextElementSibling;
+    let count = 0;
+    while (next && count < 10) {
+      const text = next.textContent?.trim();
+      if (text && text.length > 3) {
+        // 다음 섹션 헤딩이면 중단
+        if (next.tagName.match(/^H[1-4]$/) && count > 0) break;
+        items.push(text);
+      }
+      next = next.nextElementSibling;
+      count++;
+    }
+    // li 태그에서도 찾기
+    if (items.length === 0) {
+      const allLi = Array.from(scHeading.closest("div,table,section,body")?.querySelectorAll("li") || []);
+      const scIdx = allLi.findIndex(li => li.textContent?.toLowerCase().includes("special"));
+      if (scIdx >= 0) {
+        allLi.slice(scIdx, scIdx + 8).forEach(li => {
+          const t = li.textContent?.trim();
+          if (t) items.push(t);
+        });
+      }
+    }
+    return items.length > 0 ? items : null;
+  };
+
+  const specialConditions = getSpecialConditions();
+
   const rows: [string, string][] = [
     ["Property",        propertyName || "-"],
     ["Unit No.",        unitNo || "-"],
@@ -456,6 +508,19 @@ function LoiSummary({ html }: { html: string }) {
           </div>
         ))}
       </div>
+      {specialConditions && specialConditions.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <p className="text-xs font-bold text-amber-800 mb-2">📌 Special Conditions</p>
+          <div className="space-y-1.5">
+            {specialConditions.map((item, i) => (
+              <div key={i} className="flex gap-2">
+                <span className="text-xs text-amber-600 flex-shrink-0 mt-0.5">•</span>
+                <span className="text-xs text-amber-900">{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
