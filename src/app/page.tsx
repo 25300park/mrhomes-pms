@@ -19,12 +19,13 @@ export default async function RootPage() {
   if (!authMap) redirect("/tenant");
 
   switch (authMap.role) {
-    case "tenant":   redirect("/tenant");
-    case "landlord": redirect("/landlord");
+    case "tenant":      redirect("/tenant");
+    case "landlord":    redirect("/landlord");
+    case "prospective": redirect("/documents");
     case "admin":
     case "agent":
       redirect(process.env.NEXT_PUBLIC_CRM_URL ?? "/login");
     default:
-      redirect("/tenant");
+      redirect("/documents");
   }
 }
